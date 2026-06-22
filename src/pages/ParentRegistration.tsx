@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
-import { ArrowLeft, Loader2, CheckCircle, User, BookOpen, MapPin, IndianRupee, Clock, Phone } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowLeft, Loader2, CheckCircle, User, BookOpen, MapPin, IndianRupee, Clock, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { SUBJECTS, CLASSES } from '../lib/constants';
-import { Button, Input, Select, Card, Badge, ChipToggle } from '../components/ui';
+import { Button, Input, Select, Card, ChipToggle } from '../components/ui';
 
 type Page = 'landing' | 'login' | 'register-tutor' | 'register-parent' | 'tutor-dashboard' | 'parent-dashboard' | 'admin' | 'tutor-profile';
 
@@ -12,23 +12,24 @@ interface ParentRegistrationProps {
 }
 
 const STEPS = [
-  { number: 1, title: 'Phone', icon: Phone },
+  { number: 1, title: 'Account', icon: Mail },
   { number: 2, title: 'Details', icon: BookOpen },
   { number: 3, title: 'Location', icon: MapPin },
 ];
 
 export default function ParentRegistration({ onNavigate }: ParentRegistrationProps) {
-  const { signInWithPhone, verifyOtp } = useAuth();
+  const { signUpWithEmail } = useAuth();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [redirecting, setRedirecting] = useState(false);
-  const [countdown, setCountdown] = useState(0);
-  const [otpSent, setOtpSent] = useState(false);
-  const [otp, setOtp] = useState('');
-  const [phoneVerified, setPhoneVerified] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [accountCreated, setAccountCreated] = useState(false);
 
   const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    confirmPassword: '',
     parentName: '',
     mobileNumber: '',
     childName: '',
@@ -44,80 +45,41 @@ export default function ParentRegistration({ onNavigate }: ParentRegistrationPro
     location: '',
   });
 
-  // Countdown timer for resend
-  useEffect(() => {
-    if (countdown > 0) {
-      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [countdown]);
-
   const updateForm = (field: string, value: string | string[] | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleSendOtp = async () => {
-    if (formData.mobileNumber.length !== 10) {
-      setError('Please enter a valid 10-digit mobile number');
+  const handleCreateAccount = async () => {
+    if (!formData.email) {
+      setError('Please enter your email');
+      return;
+    }
+    if (!formData.password) {
+      setError('Please enter a password');
+      return;
+    }
+    if (formData.password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match');
       return;
     }
 
     setLoading(true);
     setError('');
 
-    const formattedPhone = `+91${formData.mobileNumber}`;
-    const { error } = await signInWithPhone(formattedPhone);
+    const { error } = await signUpWithEmail(formData.email, formData.password);
 
     if (error) {
-      setError(error.message || 'Failed to send OTP. Please try again.');
+      setError(error.message || 'Failed to create account. Please try again.');
       setLoading(false);
       return;
     }
 
-    setOtpSent(true);
-    setCountdown(60);
-    setLoading(false);
-  };
-
-  const handleVerifyOtp = async () => {
-    if (otp.length !== 6) {
-      setError('Please enter a valid 6-digit OTP');
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-
-    const formattedPhone = `+91${formData.mobileNumber}`;
-    const { error } = await verifyOtp(formattedPhone, otp);
-
-    if (error) {
-      setError('Invalid OTP. Please try again.');
-      setLoading(false);
-      return;
-    }
-
-    setPhoneVerified(true);
+    setAccountCreated(true);
     setStep(2);
-    setLoading(false);
-  };
-
-  const handleResendOtp = async () => {
-    if (countdown > 0) return;
-
-    setLoading(true);
-    setError('');
-    setOtp('');
-
-    const formattedPhone = `+91${formData.mobileNumber}`;
-    const { error } = await signInWithPhone(formattedPhone);
-
-    if (error) {
-      setError(error.message || 'Failed to resend OTP.');
-    } else {
-      setCountdown(60);
-    }
-
     setLoading(false);
   };
 
@@ -128,6 +90,10 @@ export default function ParentRegistration({ onNavigate }: ParentRegistrationPro
       case 2:
         if (!formData.parentName) {
           setError('Please enter your name');
+          return false;
+        }
+        if (!formData.mobileNumber || formData.mobileNumber.length !== 10) {
+          setError('Please enter a valid 10-digit mobile number');
           return false;
         }
         if (!formData.childName || !formData.childClass) {
@@ -153,7 +119,9 @@ export default function ParentRegistration({ onNavigate }: ParentRegistrationPro
   };
 
   const nextStep = () => {
-    if (validateStep(step)) {
+    if (step === 1) {
+      handleCreateAccount();
+    } else if (validateStep(step)) {
       setStep((prev) => Math.min(prev + 1, 3));
     }
   };
@@ -171,7 +139,7 @@ export default function ParentRegistration({ onNavigate }: ParentRegistrationPro
     try {
       const userId = (await supabase.auth.getUser()).data.user?.id;
       if (!userId) {
-        setError('Please verify your phone number first');
+        setError('Please create your account first');
         setLoading(false);
         return;
       }
@@ -193,7 +161,6 @@ export default function ParentRegistration({ onNavigate }: ParentRegistrationPro
         preferred_timing_evening: formData.timingEvening,
       });
 
-      // Show loading state before redirecting
       setRedirecting(true);
       await new Promise((resolve) => setTimeout(resolve, 500));
       onNavigate('parent-dashboard');
@@ -204,7 +171,6 @@ export default function ParentRegistration({ onNavigate }: ParentRegistrationPro
     }
   };
 
-  // Show redirecting screen
   if (redirecting) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-white flex flex-col items-center justify-center p-4">
@@ -226,7 +192,7 @@ export default function ParentRegistration({ onNavigate }: ParentRegistrationPro
         <div className="max-w-3xl mx-auto px-4 py-4">
           <div className="flex items-center gap-4">
             <button
-              onClick={() => (step > 1 && phoneVerified ? prevStep() : onNavigate('landing'))}
+              onClick={() => (step > 1 && accountCreated ? prevStep() : onNavigate('landing'))}
               className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
             >
               <ArrowLeft className="w-5 h-5 text-gray-600" />
@@ -276,114 +242,359 @@ export default function ParentRegistration({ onNavigate }: ParentRegistrationPro
           </div>
         )}
 
-        {/* Step 1: Phone Verification */}
+        {/* Step 1: Account Creation */}
         {step === 1 && (
           <Card padding="lg" className="animate-fade-in">
             <div className="mb-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-2">Verify Your Mobile Number</h2>
-              <p className="text-gray-500">We'll send a 6-digit OTP to verify your number</p>
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Create Your Account</h2>
+              <p className="text-gray-500">Enter your email and create a password</p>
             </div>
 
             <div className="space-y-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Mobile Number</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <span className="text-gray-600 font-semibold">+91</span>
-                  </div>
-                  <div className="absolute inset-y-0 left-14 flex items-center">
-                    <Phone className="w-5 h-5 text-gray-400" />
+                    <Mail className="w-5 h-5 text-gray-400" />
                   </div>
                   <input
-                    type="tel"
-                    value={formData.mobileNumber}
+                    type="email"
+                    value={formData.email}
                     onChange={(e) => {
-                      const value = e.target.value.replace(/\D/g, '').slice(0, 10);
-                      updateForm('mobileNumber', value);
+                      updateForm('email', e.target.value);
                       setError('');
-                      setOtpSent(false);
                     }}
-                    placeholder="Enter mobile number"
-                    className="w-full pl-24 pr-4 py-4 bg-gray-50 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all text-lg"
-                    maxLength={10}
-                    inputMode="numeric"
-                    disabled={phoneVerified}
+                    placeholder="Enter your email"
+                    className="w-full pl-12 pr-4 py-4 bg-gray-50 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all"
+                    autoFocus
                   />
                 </div>
               </div>
 
-              {!otpSent && !phoneVerified && (
-                <Button
-                  onClick={handleSendOtp}
-                  disabled={loading || formData.mobileNumber.length !== 10}
-                  size="lg"
-                  className="w-full"
-                >
-                  Send OTP
-                </Button>
-              )}
-
-              {otpSent && !phoneVerified && (
-                <div className="space-y-4">
-                  <div className="text-center text-gray-700">
-                    We've sent a 6-digit OTP to +91 {formData.mobileNumber}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <Lock className="w-5 h-5 text-gray-400" />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2 text-center">
-                      Enter OTP
-                    </label>
-                    <input
-                      type="text"
-                      value={otp}
-                      onChange={(e) => {
-                        const value = e.target.value.replace(/\D/g, '').slice(0, 6);
-                        setOtp(value);
-                        setError('');
-                      }}
-                      placeholder="------"
-                      className="w-full px-4 py-4 bg-gray-50 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all text-center text-3xl tracking-widest font-bold"
-                      maxLength={6}
-                      inputMode="numeric"
-                    />
-                  </div>
-                  <Button
-                    onClick={handleVerifyOtp}
-                    disabled={loading || otp.length !== 6}
-                    size="lg"
-                    className="w-full"
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={formData.password}
+                    onChange={(e) => {
+                      updateForm('password', e.target.value);
+                      setError('');
+                    }}
+                    placeholder="Create a password (min 6 characters)"
+                    className="w-full pl-12 pr-12 py-4 bg-gray-50 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-4 flex items-center"
                   >
-                    Verify & Continue
-                  </Button>
-                  <div className="text-center space-y-2">
-                    <button
-                      type="button"
-                      onClick={handleResendOtp}
-                      disabled={countdown > 0 || loading}
-                      className={`text-sm font-medium ${
-                        countdown > 0 ? 'text-gray-400 cursor-not-allowed' : 'text-primary-600 hover:text-primary-700'
+                    {showPassword ? (
+                      <EyeOff className="w-5 h-5 text-gray-400 hover:text-gray-600" />
+                    ) : (
+                      <Eye className="w-5 h-5 text-gray-400 hover:text-gray-600" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Confirm Password</label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <Lock className="w-5 h-5 text-gray-400" />
+                  </div>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={formData.confirmPassword}
+                    onChange={(e) => {
+                      updateForm('confirmPassword', e.target.value);
+                      setError('');
+                    }}
+                    placeholder="Confirm your password"
+                    className="w-full pl-12 pr-4 py-4 bg-gray-50 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all"
+                  />
+                </div>
+              </div>
+
+              <Button
+                onClick={nextStep}
+                disabled={loading}
+                loading={loading}
+                size="lg"
+                className="w-full"
+              >
+                Create Account & Continue
+              </Button>
+
+              <p className="text-center text-sm text-gray-500">
+                Already have an account?{' '}
+                <button
+                  type="button"
+                  onClick={() => onNavigate('login')}
+                  className="text-primary-600 hover:text-primary-700 font-medium"
+                >
+                  Sign In
+                </button>
+              </p>
+            </div>
+          </Card>
+        )}
+
+        {/* Step 2: Student Details */}
+        {step === 2 && (
+          <Card padding="lg" className="animate-fade-in">
+            {accountCreated && (
+              <div className="mb-6 flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
+                <CheckCircle className="w-6 h-6 text-green-600" />
+                <div>
+                  <p className="font-semibold text-green-800">Account Created</p>
+                  <p className="text-sm text-green-600">{formData.email}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="mb-6">
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Parent & Student Details</h2>
+              <p className="text-gray-500">Tell us about yourself and your child</p>
+            </div>
+
+            <div className="space-y-6">
+              <div>
+                <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <User className="w-5 h-5 text-primary-600" />
+                  Parent Details
+                </h3>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <Input
+                    label="Parent/Guardian Name"
+                    value={formData.parentName}
+                    onChange={(e) => updateForm('parentName', e.target.value)}
+                    placeholder="Your full name"
+                  />
+                  <Input
+                    label="Mobile Number"
+                    value={formData.mobileNumber}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      updateForm('mobileNumber', value);
+                    }}
+                    placeholder="10-digit mobile number"
+                    maxLength={10}
+                  />
+                </div>
+              </div>
+
+              <div className="pt-6 border-t border-gray-100">
+                <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <BookOpen className="w-5 h-5 text-primary-600" />
+                  Student Details
+                </h3>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <Input
+                    label="Student's Name"
+                    value={formData.childName}
+                    onChange={(e) => updateForm('childName', e.target.value)}
+                    placeholder="Child's name"
+                  />
+                  <Select
+                    label="Current Class"
+                    value={formData.childClass}
+                    onChange={(e) => updateForm('childClass', e.target.value)}
+                    options={CLASSES.map((c) => ({ value: c, label: c }))}
+                    placeholder="Select class"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-6 border-t border-gray-100">
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Subjects Required
+                </label>
+                <ChipToggle
+                  options={SUBJECTS.map((s) => ({ value: s, label: s }))}
+                  selected={formData.subjectsRequired}
+                  onChange={(selected) => updateForm('subjectsRequired', selected)}
+                />
+                <p className="text-xs text-gray-500 mt-2">
+                  Selected: {formData.subjectsRequired.length} subjects
+                </p>
+              </div>
+
+              <div className="pt-6 border-t border-gray-100">
+                <label className="block text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+                  <IndianRupee className="w-4 h-4 text-primary-600" />
+                  Budget Range (Monthly)
+                </label>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <Input
+                    label="Minimum Budget (Rs)"
+                    type="number"
+                    value={formData.budgetMin}
+                    onChange={(e) => updateForm('budgetMin', e.target.value)}
+                    placeholder="e.g., 2000"
+                  />
+                  <Input
+                    label="Maximum Budget (Rs)"
+                    type="number"
+                    value={formData.budgetMax}
+                    onChange={(e) => updateForm('budgetMax', e.target.value)}
+                    placeholder="e.g., 5000"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-6 border-t border-gray-100">
+                <label className="block text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-primary-600" />
+                  Preferred Timing
+                </label>
+                <div className="grid md:grid-cols-3 gap-4">
+                  {[
+                    { key: 'timingMorning', label: 'Morning', time: '7 AM - 12 PM' },
+                    { key: 'timingAfternoon', label: 'Afternoon', time: '12 PM - 5 PM' },
+                    { key: 'timingEvening', label: 'Evening', time: '5 PM - 9 PM' },
+                  ].map((timing) => (
+                    <div
+                      key={timing.key}
+                      className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                        formData[timing.key as keyof typeof formData]
+                          ? 'border-primary-600 bg-primary-50'
+                          : 'border-gray-200 hover:border-gray-300'
                       }`}
+                      onClick={() => updateForm(timing.key, !formData[timing.key as keyof typeof formData])}
                     >
-                      {countdown > 0 ? `Resend OTP in ${countdown}s` : 'Resend OTP'}
-                    </button>
+                      <div className="flex items-center gap-3">
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                          formData[timing.key as keyof typeof formData] ? 'border-primary-600 bg-primary-600' : 'border-gray-300'
+                        }`}>
+                          {formData[timing.key as keyof typeof formData] && (
+                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">{timing.label}</p>
+                          <p className="text-xs text-gray-500">{timing.time}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 flex gap-3">
+              <Button variant="outline" onClick={prevStep} size="lg" className="flex-1">
+                Back
+              </Button>
+              <Button onClick={nextStep} size="lg" className="flex-1">
+                Continue
+              </Button>
+            </div>
+          </Card>
+        )}
+
+        {/* Step 3: Location */}
+        {step === 3 && (
+          <Card padding="lg" className="animate-fade-in">
+            <div className="mb-6">
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Location Details</h2>
+              <p className="text-gray-500">Where are you located?</p>
+            </div>
+
+            <div className="space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Full Address</label>
+                <textarea
+                  value={formData.address}
+                  onChange={(e) => updateForm('address', e.target.value)}
+                  placeholder="House/Flat No., Street, Area"
+                  rows={3}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none resize-none transition-all"
+                />
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <Input
+                  label="PIN Code"
+                  value={formData.pinCode}
+                  onChange={(e) => updateForm('pinCode', e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="6-digit PIN"
+                  maxLength={6}
+                />
+                <Input
+                  label="City/Locality"
+                  value={formData.location}
+                  onChange={(e) => updateForm('location', e.target.value)}
+                  placeholder="e.g., Delhi, Mumbai"
+                />
+              </div>
+
+              {/* Summary */}
+              <div className="pt-6 border-t border-gray-100">
+                <h3 className="font-semibold text-gray-900 mb-4">Registration Summary</h3>
+                <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Parent Name</span>
+                    <span className="font-medium text-gray-900">{formData.parentName || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Email</span>
+                    <span className="font-medium text-gray-900">{formData.email || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Phone</span>
+                    <span className="font-medium text-gray-900">+91 {formData.mobileNumber || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Student</span>
+                    <span className="font-medium text-gray-900">{formData.childName || '-'} ({formData.childClass || '-'})</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Subjects</span>
+                    <span className="font-medium text-gray-900">{formData.subjectsRequired.length} selected</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Budget</span>
+                    <span className="font-medium text-gray-900">
+                      Rs {formData.budgetMin || '0'} - {formData.budgetMax || '0'}/mo
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Preferred Time</span>
+                    <span className="font-medium text-gray-900">
+                      {[
+                        formData.timingMorning && 'Morning',
+                        formData.timingAfternoon && 'Afternoon',
+                        formData.timingEvening && 'Evening',
+                      ].filter(Boolean).join(', ') || 'Any'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Location</span>
+                    <span className="font-medium text-gray-900">{formData.location || '-'}</span>
                   </div>
                 </div>
-              )}
+              </div>
+            </div>
 
-              {phoneVerified && (
-                <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
-                  <CheckCircle className="w-6 h-6 text-green-600" />
-                  <div>
-                    <p className="font-semibold text-green-800">Phone Verified</p>
-                    <p className="text-sm text-green-600">+91 {formData.mobileNumber}</p>
-                  </div>
-                </div>
-              )}
-
-              {phoneVerified && (
-                <Button onClick={() => setStep(2)} size="lg" className="w-full">
-                  Continue Registration
-                </Button>
-              )}
+            <div className="mt-8 flex gap-3">
+              <Button variant="outline" onClick={prevStep} size="lg" className="flex-1">
+                Back
+              </Button>
+              <Button
+                onClick={handleSubmit}
+                size="lg"
+                loading={loading}
+                className="flex-1"
+              >
+                Complete Registration
+              </Button>
             </div>
           </Card>
         )}

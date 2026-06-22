@@ -27,13 +27,27 @@ function AppContent() {
     }
   };
 
+  // Protect dashboard routes
+  const protectedPages: Page[] = ['tutor-dashboard', 'parent-dashboard', 'admin', 'tutor-profile'];
+
   useEffect(() => {
     if (!loading && user) {
-      if (userRole === 'tutor') handleNavigate('tutor-dashboard');
-      else if (userRole === 'parent') handleNavigate('parent-dashboard');
-      else if (userRole === 'admin') handleNavigate('admin');
+      if (userRole === 'tutor' && currentPage !== 'tutor-dashboard' && currentPage !== 'tutor-profile') {
+        handleNavigate('tutor-dashboard');
+      } else if (userRole === 'parent' && currentPage !== 'parent-dashboard' && currentPage !== 'tutor-profile') {
+        handleNavigate('parent-dashboard');
+      } else if (userRole === 'admin') {
+        handleNavigate('admin');
+      }
     }
   }, [user, userRole, loading]);
+
+  // Redirect unauthenticated users trying to access protected pages
+  useEffect(() => {
+    if (!loading && !user && protectedPages.includes(currentPage)) {
+      handleNavigate('login');
+    }
+  }, [user, loading, currentPage]);
 
   const handleLogout = async () => {
     await signOut();
@@ -59,12 +73,24 @@ function AppContent() {
       case 'register-parent':
         return <ParentRegistration onNavigate={handleNavigate} />;
       case 'tutor-dashboard':
+        if (!user || userRole !== 'tutor') {
+          return <Login onNavigate={handleNavigate} />;
+        }
         return <TutorDashboard onNavigate={handleNavigate} onLogout={handleLogout} />;
       case 'parent-dashboard':
+        if (!user || userRole !== 'parent') {
+          return <Login onNavigate={handleNavigate} />;
+        }
         return <ParentDashboard onNavigate={handleNavigate} onLogout={handleLogout} />;
       case 'admin':
+        if (!user || userRole !== 'admin') {
+          return <Login onNavigate={handleNavigate} />;
+        }
         return <AdminPanel onNavigate={handleNavigate} onLogout={handleLogout} />;
       case 'tutor-profile':
+        if (!user || userRole !== 'parent') {
+          return <Login onNavigate={handleNavigate} />;
+        }
         return (
           <TutorProfile
             tutorId={navigationData.tutorId}

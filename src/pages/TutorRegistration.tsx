@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { ArrowLeft, Upload, Loader2, CheckCircle, User, BookOpen, MapPin, IndianRupee, Clock, Globe, Phone, Shield } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowLeft, Upload, Loader2, CheckCircle, User, BookOpen, MapPin, IndianRupee, Clock, Globe, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { SUBJECTS, CLASSES, LANGUAGES, QUALIFICATIONS, GENDERS } from '../lib/constants';
@@ -12,7 +12,7 @@ interface TutorRegistrationProps {
 }
 
 const STEPS = [
-  { number: 1, title: 'Phone', icon: Phone },
+  { number: 1, title: 'Account', icon: Mail },
   { number: 2, title: 'Personal', icon: User },
   { number: 3, title: 'Education', icon: BookOpen },
   { number: 4, title: 'Teaching', icon: Clock },
@@ -20,18 +20,19 @@ const STEPS = [
 ];
 
 export default function TutorRegistration({ onNavigate }: TutorRegistrationProps) {
-  const { signInWithPhone, verifyOtp } = useAuth();
+  const { signUpWithEmail } = useAuth();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [redirecting, setRedirecting] = useState(false);
   const [availability, setAvailability] = useState(true);
-  const [countdown, setCountdown] = useState(0);
-  const [otpSent, setOtpSent] = useState(false);
-  const [otp, setOtp] = useState('');
-  const [phoneVerified, setPhoneVerified] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [accountCreated, setAccountCreated] = useState(false);
 
   const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    confirmPassword: '',
     fullName: '',
     mobileNumber: '',
     gender: '',
@@ -54,14 +55,6 @@ export default function TutorRegistration({ onNavigate }: TutorRegistrationProps
   const [idProof, setIdProof] = useState<File | null>(null);
   const [profilePhotoPreview, setProfilePhotoPreview] = useState<string | null>(null);
 
-  // Countdown timer for resend
-  useEffect(() => {
-    if (countdown > 0) {
-      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [countdown]);
-
   const updateForm = (field: string, value: string | string[]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
@@ -80,68 +73,37 @@ export default function TutorRegistration({ onNavigate }: TutorRegistrationProps
     }
   };
 
-  const handleSendOtp = async () => {
-    if (formData.mobileNumber.length !== 10) {
-      setError('Please enter a valid 10-digit mobile number');
+  const handleCreateAccount = async () => {
+    if (!formData.email) {
+      setError('Please enter your email');
+      return;
+    }
+    if (!formData.password) {
+      setError('Please enter a password');
+      return;
+    }
+    if (formData.password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match');
       return;
     }
 
     setLoading(true);
     setError('');
 
-    const formattedPhone = `+91${formData.mobileNumber}`;
-    const { error } = await signInWithPhone(formattedPhone);
+    const { error } = await signUpWithEmail(formData.email, formData.password);
 
     if (error) {
-      setError(error.message || 'Failed to send OTP. Please try again.');
+      setError(error.message || 'Failed to create account. Please try again.');
       setLoading(false);
       return;
     }
 
-    setOtpSent(true);
-    setCountdown(60);
-    setLoading(false);
-  };
-
-  const handleVerifyOtp = async () => {
-    if (otp.length !== 6) {
-      setError('Please enter a valid 6-digit OTP');
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-
-    const formattedPhone = `+91${formData.mobileNumber}`;
-    const { error } = await verifyOtp(formattedPhone, otp);
-
-    if (error) {
-      setError('Invalid OTP. Please try again.');
-      setLoading(false);
-      return;
-    }
-
-    setPhoneVerified(true);
+    setAccountCreated(true);
     setStep(2);
-    setLoading(false);
-  };
-
-  const handleResendOtp = async () => {
-    if (countdown > 0) return;
-
-    setLoading(true);
-    setError('');
-    setOtp('');
-
-    const formattedPhone = `+91${formData.mobileNumber}`;
-    const { error } = await signInWithPhone(formattedPhone);
-
-    if (error) {
-      setError(error.message || 'Failed to resend OTP.');
-    } else {
-      setCountdown(60);
-    }
-
     setLoading(false);
   };
 
@@ -150,8 +112,12 @@ export default function TutorRegistration({ onNavigate }: TutorRegistrationProps
 
     switch (stepNum) {
       case 2:
-        if (!formData.fullName || !formData.gender || !formData.dateOfBirth) {
+        if (!formData.fullName || !formData.mobileNumber || !formData.gender || !formData.dateOfBirth) {
           setError('Please fill all personal details');
+          return false;
+        }
+        if (formData.mobileNumber.length !== 10) {
+          setError('Please enter a valid 10-digit mobile number');
           return false;
         }
         return true;
@@ -195,7 +161,9 @@ export default function TutorRegistration({ onNavigate }: TutorRegistrationProps
   };
 
   const nextStep = () => {
-    if (validateStep(step)) {
+    if (step === 1) {
+      handleCreateAccount();
+    } else if (validateStep(step)) {
       setStep((prev) => Math.min(prev + 1, 5));
     }
   };
@@ -213,7 +181,7 @@ export default function TutorRegistration({ onNavigate }: TutorRegistrationProps
     try {
       const userId = (await supabase.auth.getUser()).data.user?.id;
       if (!userId) {
-        setError('Please verify your phone number first');
+        setError('Please create your account first');
         setLoading(false);
         return;
       }
@@ -243,7 +211,6 @@ export default function TutorRegistration({ onNavigate }: TutorRegistrationProps
         profile_completion: profileCompletion,
       });
 
-      // Show loading state before redirecting
       setRedirecting(true);
       await new Promise((resolve) => setTimeout(resolve, 500));
       onNavigate('tutor-dashboard');
@@ -277,7 +244,6 @@ export default function TutorRegistration({ onNavigate }: TutorRegistrationProps
     return Math.round((filled / fields.length) * 100);
   };
 
-  // Show redirecting screen
   if (redirecting) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-white flex flex-col items-center justify-center p-4">
@@ -299,7 +265,7 @@ export default function TutorRegistration({ onNavigate }: TutorRegistrationProps
         <div className="max-w-3xl mx-auto px-4 py-4">
           <div className="flex items-center gap-4">
             <button
-              onClick={() => (step > 1 && phoneVerified ? prevStep() : onNavigate('landing'))}
+              onClick={() => (step > 1 && accountCreated ? prevStep() : onNavigate('landing'))}
               className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
             >
               <ArrowLeft className="w-5 h-5 text-gray-600" />
@@ -349,119 +315,516 @@ export default function TutorRegistration({ onNavigate }: TutorRegistrationProps
           </div>
         )}
 
-        {/* Step 1: Phone Verification */}
+        {/* Step 1: Account Details */}
         {step === 1 && (
           <Card padding="lg" className="animate-fade-in">
             <div className="mb-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-2">Verify Your Mobile Number</h2>
-              <p className="text-gray-500">We'll send a 6-digit OTP to verify your number</p>
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Create Your Account</h2>
+              <p className="text-gray-500">Enter your email and create a password</p>
             </div>
 
             <div className="space-y-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Mobile Number</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <span className="text-gray-600 font-semibold">+91</span>
-                  </div>
-                  <div className="absolute inset-y-0 left-14 flex items-center">
-                    <Phone className="w-5 h-5 text-gray-400" />
+                    <Mail className="w-5 h-5 text-gray-400" />
                   </div>
                   <input
-                    type="tel"
-                    value={formData.mobileNumber}
+                    type="email"
+                    value={formData.email}
                     onChange={(e) => {
-                      const value = e.target.value.replace(/\D/g, '').slice(0, 10);
-                      updateForm('mobileNumber', value);
+                      updateForm('email', e.target.value);
                       setError('');
-                      setOtpSent(false);
                     }}
-                    placeholder="Enter mobile number"
-                    className="w-full pl-24 pr-4 py-4 bg-gray-50 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all text-lg"
-                    maxLength={10}
-                    inputMode="numeric"
-                    disabled={phoneVerified}
+                    placeholder="Enter your email"
+                    className="w-full pl-12 pr-4 py-4 bg-gray-50 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all"
+                    autoFocus
                   />
                 </div>
               </div>
 
-              {!otpSent && !phoneVerified && (
-                <Button
-                  onClick={handleSendOtp}
-                  disabled={loading || formData.mobileNumber.length !== 10}
-                  size="lg"
-                  className="w-full"
-                >
-                  Send OTP
-                </Button>
-              )}
-
-              {otpSent && !phoneVerified && (
-                <div className="space-y-4">
-                  <div className="text-center text-gray-700">
-                    We've sent a 6-digit OTP to +91 {formData.mobileNumber}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <Lock className="w-5 h-5 text-gray-400" />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2 text-center">
-                      Enter OTP
-                    </label>
-                    <input
-                      type="text"
-                      value={otp}
-                      onChange={(e) => {
-                        const value = e.target.value.replace(/\D/g, '').slice(0, 6);
-                        setOtp(value);
-                        setError('');
-                      }}
-                      placeholder="------"
-                      className="w-full px-4 py-4 bg-gray-50 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all text-center text-3xl tracking-widest font-bold"
-                      maxLength={6}
-                      inputMode="numeric"
-                    />
-                  </div>
-                  <Button
-                    onClick={handleVerifyOtp}
-                    disabled={loading || otp.length !== 6}
-                    size="lg"
-                    className="w-full"
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={formData.password}
+                    onChange={(e) => {
+                      updateForm('password', e.target.value);
+                      setError('');
+                    }}
+                    placeholder="Create a password (min 6 characters)"
+                    className="w-full pl-12 pr-12 py-4 bg-gray-50 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-4 flex items-center"
                   >
-                    Verify & Continue
-                  </Button>
-                  <div className="text-center space-y-2">
-                    <button
-                      type="button"
-                      onClick={handleResendOtp}
-                      disabled={countdown > 0 || loading}
-                      className={`text-sm font-medium ${
-                        countdown > 0 ? 'text-gray-400 cursor-not-allowed' : 'text-primary-600 hover:text-primary-700'
-                      }`}
-                    >
-                      {countdown > 0 ? `Resend OTP in ${countdown}s` : 'Resend OTP'}
-                    </button>
-                  </div>
+                    {showPassword ? (
+                      <EyeOff className="w-5 h-5 text-gray-400 hover:text-gray-600" />
+                    ) : (
+                      <Eye className="w-5 h-5 text-gray-400 hover:text-gray-600" />
+                    )}
+                  </button>
                 </div>
-              )}
+              </div>
 
-              {phoneVerified && (
-                <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
-                  <CheckCircle className="w-6 h-6 text-green-600" />
-                  <div>
-                    <p className="font-semibold text-green-800">Phone Verified</p>
-                    <p className="text-sm text-green-600">+91 {formData.mobileNumber}</p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Confirm Password</label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <Lock className="w-5 h-5 text-gray-400" />
                   </div>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={formData.confirmPassword}
+                    onChange={(e) => {
+                      updateForm('confirmPassword', e.target.value);
+                      setError('');
+                    }}
+                    placeholder="Confirm your password"
+                    className="w-full pl-12 pr-4 py-4 bg-gray-50 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all"
+                  />
                 </div>
-              )}
+              </div>
 
-              {phoneVerified && (
-                <Button onClick={() => setStep(2)} size="lg" className="w-full">
-                  Continue Registration
-                </Button>
-              )}
+              <Button
+                onClick={nextStep}
+                disabled={loading}
+                loading={loading}
+                size="lg"
+                className="w-full"
+              >
+                Create Account & Continue
+              </Button>
+
+              <p className="text-center text-sm text-gray-500">
+                Already have an account?{' '}
+                <button
+                  type="button"
+                  onClick={() => onNavigate('login')}
+                  className="text-primary-600 hover:text-primary-700 font-medium"
+                >
+                  Sign In
+                </button>
+              </p>
             </div>
           </Card>
         )}
 
-        {/* Step 2-5: Other steps will be in next commit */}
+        {/* Step 2: Personal Details */}
+        {step === 2 && (
+          <Card padding="lg" className="animate-fade-in">
+            {accountCreated && (
+              <div className="mb-6 flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
+                <CheckCircle className="w-6 h-6 text-green-600" />
+                <div>
+                  <p className="font-semibold text-green-800">Account Created</p>
+                  <p className="text-sm text-green-600">{formData.email}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="mb-6">
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Personal Information</h2>
+              <p className="text-gray-500">Tell us about yourself</p>
+            </div>
+
+            <div className="space-y-6">
+              <Input
+                label="Full Name"
+                value={formData.fullName}
+                onChange={(e) => updateForm('fullName', e.target.value)}
+                placeholder="Your full name"
+              />
+
+              <Input
+                label="Mobile Number"
+                value={formData.mobileNumber}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                  updateForm('mobileNumber', value);
+                }}
+                placeholder="10-digit mobile number"
+                maxLength={10}
+                hint="We'll contact you on this number"
+              />
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <Select
+                  label="Gender"
+                  value={formData.gender}
+                  onChange={(e) => updateForm('gender', e.target.value)}
+                  options={GENDERS.map((g) => ({ value: g, label: g }))}
+                  placeholder="Select gender"
+                />
+                <Input
+                  label="Date of Birth"
+                  type="date"
+                  value={formData.dateOfBirth}
+                  onChange={(e) => updateForm('dateOfBirth', e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="mt-8 flex gap-3">
+              <Button variant="outline" onClick={prevStep} size="lg" className="flex-1">
+                Back
+              </Button>
+              <Button onClick={nextStep} size="lg" className="flex-1">
+                Continue
+              </Button>
+            </div>
+          </Card>
+        )}
+
+        {/* Step 3: Education */}
+        {step === 3 && (
+          <Card padding="lg" className="animate-fade-in">
+            <div className="mb-6">
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Educational Qualification</h2>
+              <p className="text-gray-500">Tell us about your education background</p>
+            </div>
+
+            <div className="space-y-6">
+              <div className="grid md:grid-cols-2 gap-4">
+                <Select
+                  label="Highest Qualification"
+                  value={formData.qualification}
+                  onChange={(e) => updateForm('qualification', e.target.value)}
+                  options={QUALIFICATIONS.map((q) => ({ value: q, label: q }))}
+                  placeholder="Select qualification"
+                />
+                <Input
+                  label="College/School Name"
+                  value={formData.collegeSchool}
+                  onChange={(e) => updateForm('collegeSchool', e.target.value)}
+                  placeholder="Name of your institution"
+                />
+              </div>
+
+              <Input
+                label="Teaching Experience (Years)"
+                type="number"
+                value={formData.experienceYears}
+                onChange={(e) => updateForm('experienceYears', e.target.value)}
+                placeholder="e.g., 2"
+                hint="Enter 0 if you're a fresher"
+              />
+
+              {/* Document Upload */}
+              <div className="pt-6 border-t border-gray-100">
+                <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <Upload className="w-5 h-5 text-primary-600" />
+                  Documents
+                </h3>
+                <div className="grid md:grid-cols-2 gap-6">
+                  {/* Profile Photo */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Profile Photo</label>
+                    <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center hover:border-primary-500 transition-colors cursor-pointer bg-gray-50">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleFileChange(e, 'profile')}
+                        className="hidden"
+                        id="profile-photo"
+                      />
+                      <label htmlFor="profile-photo" className="cursor-pointer">
+                        {profilePhotoPreview ? (
+                          <img
+                            src={profilePhotoPreview}
+                            alt="Profile"
+                            className="w-24 h-24 rounded-full object-cover mx-auto mb-2 border-4 border-primary-100"
+                          />
+                        ) : (
+                          <div className="w-20 h-20 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                            <User className="w-8 h-8 text-primary-600" />
+                          </div>
+                        )}
+                        <p className="text-sm text-gray-600 font-medium">Click to upload photo</p>
+                        <p className="text-xs text-gray-400 mt-1">JPG, PNG up to 5MB</p>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* ID Proof */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">College ID / Aadhaar</label>
+                    <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center hover:border-primary-500 transition-colors cursor-pointer bg-gray-50">
+                      <input
+                        type="file"
+                        accept="image/*,.pdf"
+                        onChange={(e) => handleFileChange(e, 'id')}
+                        className="hidden"
+                        id="id-proof"
+                      />
+                      <label htmlFor="id-proof" className="cursor-pointer">
+                        <div className="w-20 h-20 bg-primary-100 rounded-xl flex items-center justify-center mx-auto mb-2">
+                          <Upload className="w-8 h-8 text-primary-600" />
+                        </div>
+                        {idProof ? (
+                          <p className="text-sm text-primary-600 font-medium">{idProof.name}</p>
+                        ) : (
+                          <>
+                            <p className="text-sm text-gray-600 font-medium">Upload ID Proof</p>
+                            <p className="text-xs text-gray-400 mt-1">College ID or Aadhaar Card</p>
+                          </>
+                        )}
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 flex gap-3">
+              <Button variant="outline" onClick={prevStep} size="lg" className="flex-1">
+                Back
+              </Button>
+              <Button onClick={nextStep} size="lg" className="flex-1">
+                Continue
+              </Button>
+            </div>
+          </Card>
+        )}
+
+        {/* Step 4: Teaching Details */}
+        {step === 4 && (
+          <Card padding="lg" className="animate-fade-in">
+            <div className="mb-6">
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Teaching Details</h2>
+              <p className="text-gray-500">What subjects and classes can you teach?</p>
+            </div>
+
+            <div className="space-y-6">
+              {/* Subjects */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Subjects You Can Teach
+                </label>
+                <ChipToggle
+                  options={SUBJECTS.map((s) => ({ value: s, label: s }))}
+                  selected={formData.subjects}
+                  onChange={(selected) => updateForm('subjects', selected)}
+                />
+                <p className="text-xs text-gray-500 mt-2">
+                  Selected: {formData.subjects.length} subjects
+                </p>
+              </div>
+
+              {/* Classes */}
+              <div className="pt-6 border-t border-gray-100">
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Classes You Can Teach
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {CLASSES.map((cls) => (
+                    <button
+                      key={cls}
+                      type="button"
+                      onClick={() => {
+                        const classes = formData.classes.includes(cls)
+                          ? formData.classes.filter((c) => c !== cls)
+                          : [...formData.classes, cls];
+                        updateForm('classes', classes);
+                      }}
+                      className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                        formData.classes.includes(cls)
+                          ? 'bg-primary-600 text-white shadow-md'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {cls}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  Selected: {formData.classes.length} classes
+                </p>
+              </div>
+
+              {/* Fee Range */}
+              <div className="pt-6 border-t border-gray-100">
+                <label className="block text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+                  <IndianRupee className="w-4 h-4 text-primary-600" />
+                  Monthly Fee Range
+                </label>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <Input
+                    label="Minimum (Rs)"
+                    type="number"
+                    value={formData.monthlyFeesMin}
+                    onChange={(e) => updateForm('monthlyFeesMin', e.target.value)}
+                    placeholder="e.g., 2000"
+                  />
+                  <Input
+                    label="Maximum (Rs)"
+                    type="number"
+                    value={formData.monthlyFeesMax}
+                    onChange={(e) => updateForm('monthlyFeesMax', e.target.value)}
+                    placeholder="e.g., 5000"
+                  />
+                </div>
+              </div>
+
+              {/* Languages */}
+              <div className="pt-6 border-t border-gray-100">
+                <label className="block text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-primary-600" />
+                  Languages Known
+                </label>
+                <ChipToggle
+                  options={LANGUAGES.map((l) => ({ value: l, label: l }))}
+                  selected={formData.languagesKnown}
+                  onChange={(selected) => updateForm('languagesKnown', selected)}
+                />
+              </div>
+
+              {/* Bio */}
+              <div className="pt-6 border-t border-gray-100">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  About You (Bio)
+                </label>
+                <textarea
+                  value={formData.bio}
+                  onChange={(e) => updateForm('bio', e.target.value)}
+                  placeholder="Write a brief description about yourself, your teaching style, and what makes you a great tutor..."
+                  rows={4}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none resize-none transition-all"
+                />
+              </div>
+
+              {/* Availability Toggle */}
+              <div className="pt-6 border-t border-gray-100">
+                <Toggle
+                  enabled={availability}
+                  onChange={setAvailability}
+                  label="Available for Tuition"
+                  description={availability ? 'Parents can find and contact you' : 'Hidden from search results'}
+                />
+              </div>
+            </div>
+
+            <div className="mt-8 flex gap-3">
+              <Button variant="outline" onClick={prevStep} size="lg" className="flex-1">
+                Back
+              </Button>
+              <Button onClick={nextStep} size="lg" className="flex-1">
+                Continue
+              </Button>
+            </div>
+          </Card>
+        )}
+
+        {/* Step 5: Location */}
+        {step === 5 && (
+          <Card padding="lg" className="animate-fade-in">
+            <div className="mb-6">
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Location Details</h2>
+              <p className="text-gray-500">Where are you located?</p>
+            </div>
+
+            <div className="space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Full Address</label>
+                <textarea
+                  value={formData.address}
+                  onChange={(e) => updateForm('address', e.target.value)}
+                  placeholder="House/Flat No., Street, Area"
+                  rows={3}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none resize-none transition-all"
+                />
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <Input
+                  label="PIN Code"
+                  value={formData.pinCode}
+                  onChange={(e) => updateForm('pinCode', e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="6-digit PIN"
+                  maxLength={6}
+                />
+                <Input
+                  label="City/Locality"
+                  value={formData.location}
+                  onChange={(e) => updateForm('location', e.target.value)}
+                  placeholder="e.g., Delhi, Mumbai"
+                />
+              </div>
+
+              {/* Map placeholder */}
+              <div className="bg-gray-100 rounded-xl h-48 flex items-center justify-center border-2 border-dashed border-gray-200">
+                <div className="text-center">
+                  <MapPin className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">Map integration coming soon</p>
+                </div>
+              </div>
+
+              {/* Summary */}
+              <div className="pt-6 border-t border-gray-100">
+                <h3 className="font-semibold text-gray-900 mb-4">Profile Summary</h3>
+                <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Name</span>
+                    <span className="font-medium text-gray-900">{formData.fullName || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Email</span>
+                    <span className="font-medium text-gray-900">{formData.email || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Phone</span>
+                    <span className="font-medium text-gray-900">+91 {formData.mobileNumber || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Qualification</span>
+                    <span className="font-medium text-gray-900">{formData.qualification || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Subjects</span>
+                    <span className="font-medium text-gray-900">{formData.subjects.length} selected</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Fee Range</span>
+                    <span className="font-medium text-gray-900">
+                      Rs {formData.monthlyFeesMin || '0'} - {formData.monthlyFeesMax || '0'}/mo
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Location</span>
+                    <span className="font-medium text-gray-900">{formData.location || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Availability</span>
+                    <Badge variant={availability ? 'success' : 'warning'} size="sm">
+                      {availability ? 'Available' : 'Not Available'}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 flex gap-3">
+              <Button variant="outline" onClick={prevStep} size="lg" className="flex-1">
+                Back
+              </Button>
+              <Button
+                onClick={handleSubmit}
+                size="lg"
+                loading={loading}
+                className="flex-1"
+              >
+                Complete Registration
+              </Button>
+            </div>
+          </Card>
+        )}
       </div>
 
       <style>{`

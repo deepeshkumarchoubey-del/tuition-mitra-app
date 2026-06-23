@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, Loader2, CheckCircle, User, BookOpen, MapPin, IndianRupee, Clock, Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Loader2, CheckCircle, User, BookOpen, MapPin, IndianRupee, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { SUBJECTS, CLASSES } from '../lib/constants';
@@ -13,8 +13,14 @@ interface ParentRegistrationProps {
 
 const STEPS = [
   { number: 1, title: 'Account', icon: Mail },
-  { number: 2, title: 'Details', icon: BookOpen },
+  { number: 2, title: 'Student', icon: BookOpen },
   { number: 3, title: 'Location', icon: MapPin },
+];
+
+const GENDER_PREFERENCES = [
+  { value: 'no_preference', label: 'No Preference', description: 'Any qualified tutor' },
+  { value: 'male', label: 'Male', description: 'Prefer male tutor' },
+  { value: 'female', label: 'Female', description: 'Prefer female tutor' },
 ];
 
 export default function ParentRegistration({ onNavigate }: ParentRegistrationProps) {
@@ -27,25 +33,26 @@ export default function ParentRegistration({ onNavigate }: ParentRegistrationPro
   const [accountCreated, setAccountCreated] = useState(false);
 
   const [formData, setFormData] = useState({
+    // Account
     email: '',
     password: '',
     confirmPassword: '',
-    parentName: '',
+    // Personal
+    fullName: '',
     mobileNumber: '',
-    childName: '',
-    childClass: '',
-    subjectsRequired: [] as string[],
-    budgetMin: '',
-    budgetMax: '',
-    timingMorning: false,
-    timingAfternoon: false,
-    timingEvening: false,
+    // Student
+    studentClass: '',
+    subjectsNeeded: [] as string[],
+    monthlyBudget: '',
+    preferredTutorGender: 'no_preference',
+    // Location
+    city: '',
+    localArea: '',
     address: '',
     pinCode: '',
-    location: '',
   });
 
-  const updateForm = (field: string, value: string | string[] | boolean) => {
+  const updateForm = (field: string, value: string | string[]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -88,27 +95,35 @@ export default function ParentRegistration({ onNavigate }: ParentRegistrationPro
 
     switch (stepNum) {
       case 2:
-        if (!formData.parentName) {
-          setError('Please enter your name');
+        if (!formData.fullName) {
+          setError('Please enter your full name');
           return false;
         }
         if (!formData.mobileNumber || formData.mobileNumber.length !== 10) {
           setError('Please enter a valid 10-digit mobile number');
           return false;
         }
-        if (!formData.childName || !formData.childClass) {
-          setError('Please fill student details');
+        if (!formData.studentClass) {
+          setError('Please select student class');
           return false;
         }
-        if (formData.subjectsRequired.length === 0) {
+        if (formData.subjectsNeeded.length === 0) {
           setError('Please select at least one subject');
+          return false;
+        }
+        if (!formData.monthlyBudget) {
+          setError('Please enter your monthly budget');
           return false;
         }
         return true;
 
       case 3:
-        if (!formData.address || !formData.pinCode || !formData.location) {
-          setError('Please fill all location details');
+        if (!formData.city || !formData.localArea || !formData.pinCode) {
+          setError('Please fill city, local area, and PIN code');
+          return false;
+        }
+        if (formData.pinCode.length !== 6) {
+          setError('Please enter a valid 6-digit PIN code');
           return false;
         }
         return true;
@@ -144,21 +159,23 @@ export default function ParentRegistration({ onNavigate }: ParentRegistrationPro
         return;
       }
 
+      const fullAddress = formData.address
+        ? `${formData.address}, ${formData.localArea}, ${formData.city} - ${formData.pinCode}`
+        : `${formData.localArea}, ${formData.city} - ${formData.pinCode}`;
+
       await supabase.from('parents').insert({
         user_id: userId,
-        parent_name: formData.parentName,
+        parent_name: formData.fullName,
         mobile_number: formData.mobileNumber,
-        child_name: formData.childName,
-        child_class: formData.childClass,
-        subjects_required: formData.subjectsRequired,
-        budget_min: formData.budgetMin ? parseInt(formData.budgetMin) : null,
-        budget_max: formData.budgetMax ? parseInt(formData.budgetMax) : null,
-        address: formData.address,
+        child_name: `${formData.fullName}'s Child`,
+        child_class: formData.studentClass,
+        subjects_required: formData.subjectsNeeded,
+        budget_max: parseInt(formData.monthlyBudget),
+        budget_min: null,
+        address: fullAddress,
         pin_code: formData.pinCode,
-        location: formData.location,
-        preferred_timing_morning: formData.timingMorning,
-        preferred_timing_afternoon: formData.timingAfternoon,
-        preferred_timing_evening: formData.timingEvening,
+        location: formData.city,
+        preferred_tutor_gender: formData.preferredTutorGender,
       });
 
       setRedirecting(true);
@@ -173,10 +190,10 @@ export default function ParentRegistration({ onNavigate }: ParentRegistrationPro
 
   if (redirecting) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-white flex flex-col items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-emerald-50 flex flex-col items-center justify-center p-4">
         <div className="text-center max-w-md">
-          <div className="w-24 h-24 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Loader2 className="w-12 h-12 text-primary-600 animate-spin" />
+          <div className="w-24 h-24 bg-gradient-to-br from-blue-500 to-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
+            <Loader2 className="w-12 h-12 text-white animate-spin" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-4">Account Created!</h1>
           <p className="text-gray-600">Redirecting to your dashboard...</p>
@@ -186,11 +203,11 @@ export default function ParentRegistration({ onNavigate }: ParentRegistrationPro
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-white">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-emerald-50">
       {/* Header */}
       <div className="bg-white/80 backdrop-blur-md sticky top-0 z-50 border-b border-gray-100">
-        <div className="max-w-3xl mx-auto px-4 py-4">
-          <div className="flex items-center gap-4">
+        <div className="max-w-3xl mx-auto px-4 py-3 sm:py-4">
+          <div className="flex items-center gap-3 sm:gap-4">
             <button
               onClick={() => (step > 1 && accountCreated ? prevStep() : onNavigate('landing'))}
               className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
@@ -198,46 +215,46 @@ export default function ParentRegistration({ onNavigate }: ParentRegistrationPro
               <ArrowLeft className="w-5 h-5 text-gray-600" />
             </button>
             <div className="flex-1">
-              <h1 className="font-semibold text-gray-900">Parent Registration</h1>
-              <p className="text-sm text-gray-500">Step {step} of {STEPS.length}</p>
+              <h1 className="font-semibold text-gray-900 text-sm sm:text-base">Parent Registration</h1>
+              <p className="text-xs sm:text-sm text-gray-500">Step {step} of {STEPS.length}</p>
             </div>
           </div>
         </div>
         {/* Progress bar */}
         <div className="h-1 bg-gray-100">
           <div
-            className="h-full bg-gradient-to-r from-primary-500 to-primary-600 transition-all duration-500 ease-out"
+            className="h-full bg-gradient-to-r from-blue-500 to-emerald-500 transition-all duration-500 ease-out"
             style={{ width: `${(step / STEPS.length) * 100}%` }}
           />
         </div>
       </div>
 
-      {/* Step indicators */}
-      <div className="max-w-3xl mx-auto px-4 py-6">
+      {/* Step indicators - Hidden on mobile */}
+      <div className="max-w-3xl mx-auto px-4 py-4 sm:py-6 hidden sm:block">
         <div className="flex justify-between">
           {STEPS.map((s, index) => (
             <div
               key={s.number}
-              className={`flex flex-col items-center gap-2 ${index + 1 <= step ? 'text-primary-600' : 'text-gray-400'}`}
+              className={`flex flex-col items-center gap-2 ${index + 1 <= step ? 'text-blue-600' : 'text-gray-400'}`}
             >
               <div
                 className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
                   index + 1 <= step
-                    ? 'bg-primary-600 text-white shadow-lg shadow-primary-600/25'
+                    ? 'bg-gradient-to-br from-blue-500 to-emerald-500 text-white shadow-lg'
                     : 'bg-gray-100 text-gray-400'
                 }`}
               >
                 <s.icon className="w-5 h-5" />
               </div>
-              <span className="text-xs font-medium hidden sm:block">{s.title}</span>
+              <span className="text-xs font-medium">{s.title}</span>
             </div>
           ))}
         </div>
       </div>
 
-      <div className="max-w-3xl mx-auto px-4 pb-12">
+      <div className="max-w-3xl mx-auto px-4 pb-12 sm:pb-20">
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700">
+          <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
             {error}
           </div>
         )}
@@ -250,7 +267,7 @@ export default function ParentRegistration({ onNavigate }: ParentRegistrationPro
               <p className="text-gray-500">Enter your email and create a password</p>
             </div>
 
-            <div className="space-y-6">
+            <div className="space-y-5">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
                 <div className="relative">
@@ -265,7 +282,7 @@ export default function ParentRegistration({ onNavigate }: ParentRegistrationPro
                       setError('');
                     }}
                     placeholder="Enter your email"
-                    className="w-full pl-12 pr-4 py-4 bg-gray-50 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all"
+                    className="w-full pl-12 pr-4 py-3.5 sm:py-4 bg-gray-50 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-base"
                     autoFocus
                   />
                 </div>
@@ -285,7 +302,7 @@ export default function ParentRegistration({ onNavigate }: ParentRegistrationPro
                       setError('');
                     }}
                     placeholder="Create a password (min 6 characters)"
-                    className="w-full pl-12 pr-12 py-4 bg-gray-50 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all"
+                    className="w-full pl-12 pr-12 py-3.5 sm:py-4 bg-gray-50 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-base"
                   />
                   <button
                     type="button"
@@ -315,7 +332,7 @@ export default function ParentRegistration({ onNavigate }: ParentRegistrationPro
                       setError('');
                     }}
                     placeholder="Confirm your password"
-                    className="w-full pl-12 pr-4 py-4 bg-gray-50 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all"
+                    className="w-full pl-12 pr-4 py-3.5 sm:py-4 bg-gray-50 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-base"
                   />
                 </div>
               </div>
@@ -325,7 +342,7 @@ export default function ParentRegistration({ onNavigate }: ParentRegistrationPro
                 disabled={loading}
                 loading={loading}
                 size="lg"
-                className="w-full"
+                className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
               >
                 Create Account & Continue
               </Button>
@@ -335,7 +352,7 @@ export default function ParentRegistration({ onNavigate }: ParentRegistrationPro
                 <button
                   type="button"
                   onClick={() => onNavigate('login')}
-                  className="text-primary-600 hover:text-primary-700 font-medium"
+                  className="text-blue-600 hover:text-blue-700 font-medium"
                 >
                   Sign In
                 </button>
@@ -348,31 +365,31 @@ export default function ParentRegistration({ onNavigate }: ParentRegistrationPro
         {step === 2 && (
           <Card padding="lg" className="animate-fade-in">
             {accountCreated && (
-              <div className="mb-6 flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
-                <CheckCircle className="w-6 h-6 text-green-600" />
+              <div className="mb-6 flex items-center gap-3 p-3 sm:p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+                <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600 flex-shrink-0" />
                 <div>
-                  <p className="font-semibold text-green-800">Account Created</p>
-                  <p className="text-sm text-green-600">{formData.email}</p>
+                  <p className="font-semibold text-emerald-800 text-sm sm:text-base">Account Created</p>
+                  <p className="text-xs sm:text-sm text-emerald-600">{formData.email}</p>
                 </div>
               </div>
             )}
 
             <div className="mb-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-2">Parent & Student Details</h2>
-              <p className="text-gray-500">Tell us about yourself and your child</p>
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Personal & Student Details</h2>
+              <p className="text-gray-500">Tell us about yourself and your requirements</p>
             </div>
 
-            <div className="space-y-6">
+            <div className="space-y-5">
               <div>
                 <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                  <User className="w-5 h-5 text-primary-600" />
-                  Parent Details
+                  <User className="w-5 h-5 text-blue-500" />
+                  Your Details
                 </h3>
-                <div className="grid md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Input
-                    label="Parent/Guardian Name"
-                    value={formData.parentName}
-                    onChange={(e) => updateForm('parentName', e.target.value)}
+                    label="Full Name"
+                    value={formData.fullName}
+                    onChange={(e) => updateForm('fullName', e.target.value)}
                     placeholder="Your full name"
                   />
                   <Input
@@ -388,102 +405,70 @@ export default function ParentRegistration({ onNavigate }: ParentRegistrationPro
                 </div>
               </div>
 
-              <div className="pt-6 border-t border-gray-100">
+              <div className="pt-4 border-t border-gray-100">
                 <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                  <BookOpen className="w-5 h-5 text-primary-600" />
+                  <BookOpen className="w-5 h-5 text-emerald-500" />
                   Student Details
                 </h3>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <Input
-                    label="Student's Name"
-                    value={formData.childName}
-                    onChange={(e) => updateForm('childName', e.target.value)}
-                    placeholder="Child's name"
-                  />
-                  <Select
-                    label="Current Class"
-                    value={formData.childClass}
-                    onChange={(e) => updateForm('childClass', e.target.value)}
-                    options={CLASSES.map((c) => ({ value: c, label: c }))}
-                    placeholder="Select class"
-                  />
-                </div>
-              </div>
 
-              <div className="pt-6 border-t border-gray-100">
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Subjects Required
-                </label>
-                <ChipToggle
-                  options={SUBJECTS.map((s) => ({ value: s, label: s }))}
-                  selected={formData.subjectsRequired}
-                  onChange={(selected) => updateForm('subjectsRequired', selected)}
+                <Select
+                  label="Student Class"
+                  value={formData.studentClass}
+                  onChange={(e) => updateForm('studentClass', e.target.value)}
+                  options={CLASSES.map((c) => ({ value: c, label: c }))}
+                  placeholder="Select class"
                 />
-                <p className="text-xs text-gray-500 mt-2">
-                  Selected: {formData.subjectsRequired.length} subjects
-                </p>
-              </div>
 
-              <div className="pt-6 border-t border-gray-100">
-                <label className="block text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
-                  <IndianRupee className="w-4 h-4 text-primary-600" />
-                  Budget Range (Monthly)
-                </label>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <Input
-                    label="Minimum Budget (Rs)"
-                    type="number"
-                    value={formData.budgetMin}
-                    onChange={(e) => updateForm('budgetMin', e.target.value)}
-                    placeholder="e.g., 2000"
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Subjects Needed
+                  </label>
+                  <ChipToggle
+                    options={SUBJECTS.map((s) => ({ value: s, label: s }))}
+                    selected={formData.subjectsNeeded}
+                    onChange={(selected) => updateForm('subjectsNeeded', selected)}
                   />
+                  <p className="text-xs text-gray-500 mt-2">
+                    Selected: {formData.subjectsNeeded.length} subjects
+                  </p>
+                </div>
+
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+                    <IndianRupee className="w-4 h-4 text-emerald-500" />
+                    Monthly Budget
+                  </label>
                   <Input
-                    label="Maximum Budget (Rs)"
                     type="number"
-                    value={formData.budgetMax}
-                    onChange={(e) => updateForm('budgetMax', e.target.value)}
-                    placeholder="e.g., 5000"
+                    value={formData.monthlyBudget}
+                    onChange={(e) => updateForm('monthlyBudget', e.target.value)}
+                    placeholder="e.g., 3000"
+                    hint="Your maximum budget per month (Rs)"
                   />
                 </div>
-              </div>
 
-              <div className="pt-6 border-t border-gray-100">
-                <label className="block text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-primary-600" />
-                  Preferred Timing
-                </label>
-                <div className="grid md:grid-cols-3 gap-4">
-                  {[
-                    { key: 'timingMorning', label: 'Morning', time: '7 AM - 12 PM' },
-                    { key: 'timingAfternoon', label: 'Afternoon', time: '12 PM - 5 PM' },
-                    { key: 'timingEvening', label: 'Evening', time: '5 PM - 9 PM' },
-                  ].map((timing) => (
-                    <div
-                      key={timing.key}
-                      className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                        formData[timing.key as keyof typeof formData]
-                          ? 'border-primary-600 bg-primary-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                      onClick={() => updateForm(timing.key, !formData[timing.key as keyof typeof formData])}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                          formData[timing.key as keyof typeof formData] ? 'border-primary-600 bg-primary-600' : 'border-gray-300'
-                        }`}>
-                          {formData[timing.key as keyof typeof formData] && (
-                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                          )}
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900">{timing.label}</p>
-                          <p className="text-xs text-gray-500">{timing.time}</p>
-                        </div>
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Preferred Tutor Gender
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {GENDER_PREFERENCES.map((pref) => (
+                      <div
+                        key={pref.value}
+                        className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                          formData.preferredTutorGender === pref.value
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                        onClick={() => updateForm('preferredTutorGender', pref.value)}
+                      >
+                        <p className={`font-medium text-sm ${formData.preferredTutorGender === pref.value ? 'text-blue-700' : 'text-gray-900'}`}>
+                          {pref.label}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">{pref.description}</p>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
@@ -492,7 +477,11 @@ export default function ParentRegistration({ onNavigate }: ParentRegistrationPro
               <Button variant="outline" onClick={prevStep} size="lg" className="flex-1">
                 Back
               </Button>
-              <Button onClick={nextStep} size="lg" className="flex-1">
+              <Button
+                onClick={nextStep}
+                size="lg"
+                className="flex-1 bg-gradient-to-r from-blue-500 to-emerald-500 hover:from-blue-600 hover:to-emerald-600"
+              >
                 Continue
               </Button>
             </div>
@@ -507,19 +496,14 @@ export default function ParentRegistration({ onNavigate }: ParentRegistrationPro
               <p className="text-gray-500">Where are you located?</p>
             </div>
 
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Full Address</label>
-                <textarea
-                  value={formData.address}
-                  onChange={(e) => updateForm('address', e.target.value)}
-                  placeholder="House/Flat No., Street, Area"
-                  rows={3}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none resize-none transition-all"
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input
+                  label="City"
+                  value={formData.city}
+                  onChange={(e) => updateForm('city', e.target.value)}
+                  placeholder="e.g., Delhi, Mumbai"
                 />
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-4">
                 <Input
                   label="PIN Code"
                   value={formData.pinCode}
@@ -527,57 +511,61 @@ export default function ParentRegistration({ onNavigate }: ParentRegistrationPro
                   placeholder="6-digit PIN"
                   maxLength={6}
                 />
-                <Input
-                  label="City/Locality"
-                  value={formData.location}
-                  onChange={(e) => updateForm('location', e.target.value)}
-                  placeholder="e.g., Delhi, Mumbai"
+              </div>
+
+              <Input
+                label="Area / Locality"
+                value={formData.localArea}
+                onChange={(e) => updateForm('localArea', e.target.value)}
+                placeholder="e.g., Sector 62, Rajouri Garden"
+              />
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Full Address (Optional)</label>
+                <textarea
+                  value={formData.address}
+                  onChange={(e) => updateForm('address', e.target.value)}
+                  placeholder="House/Flat No., Street, Building Name"
+                  rows={2}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none transition-all text-base"
                 />
               </div>
 
               {/* Summary */}
-              <div className="pt-6 border-t border-gray-100">
+              <div className="pt-4 border-t border-gray-100">
                 <h3 className="font-semibold text-gray-900 mb-4">Registration Summary</h3>
-                <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Parent Name</span>
-                    <span className="font-medium text-gray-900">{formData.parentName || '-'}</span>
+                <div className="bg-gradient-to-br from-blue-50 to-emerald-50 rounded-xl p-4 space-y-3">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Name</span>
+                    <span className="font-medium text-gray-900">{formData.fullName || '-'}</span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between text-sm">
                     <span className="text-gray-500">Email</span>
-                    <span className="font-medium text-gray-900">{formData.email || '-'}</span>
+                    <span className="font-medium text-gray-900 truncate max-w-[150px] sm:max-w-none">{formData.email || '-'}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Phone</span>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Mobile</span>
                     <span className="font-medium text-gray-900">+91 {formData.mobileNumber || '-'}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Student</span>
-                    <span className="font-medium text-gray-900">{formData.childName || '-'} ({formData.childClass || '-'})</span>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Student Class</span>
+                    <span className="font-medium text-gray-900">{formData.studentClass || '-'}</span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between text-sm">
                     <span className="text-gray-500">Subjects</span>
-                    <span className="font-medium text-gray-900">{formData.subjectsRequired.length} selected</span>
+                    <span className="font-medium text-gray-900">{formData.subjectsNeeded.length} selected</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Budget</span>
-                    <span className="font-medium text-gray-900">
-                      Rs {formData.budgetMin || '0'} - {formData.budgetMax || '0'}/mo
-                    </span>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Monthly Budget</span>
+                    <span className="font-medium text-gray-900">Rs {formData.monthlyBudget || '0'}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Preferred Time</span>
-                    <span className="font-medium text-gray-900">
-                      {[
-                        formData.timingMorning && 'Morning',
-                        formData.timingAfternoon && 'Afternoon',
-                        formData.timingEvening && 'Evening',
-                      ].filter(Boolean).join(', ') || 'Any'}
-                    </span>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Preferred Gender</span>
+                    <span className="font-medium text-gray-900 capitalize">{formData.preferredTutorGender.replace('_', ' ')}</span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between text-sm">
                     <span className="text-gray-500">Location</span>
-                    <span className="font-medium text-gray-900">{formData.location || '-'}</span>
+                    <span className="font-medium text-gray-900">{formData.city || '-'}</span>
                   </div>
                 </div>
               </div>
@@ -591,7 +579,7 @@ export default function ParentRegistration({ onNavigate }: ParentRegistrationPro
                 onClick={handleSubmit}
                 size="lg"
                 loading={loading}
-                className="flex-1"
+                className="flex-1 bg-gradient-to-r from-blue-500 to-emerald-500 hover:from-blue-600 hover:to-emerald-600"
               >
                 Complete Registration
               </Button>
